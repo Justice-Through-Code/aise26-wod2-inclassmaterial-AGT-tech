@@ -3,65 +3,87 @@
 
 from flask import Flask, request, jsonify
 import sqlite3
-import hashlib
+from werkzeug.security import generate_password_hash, check_password_hash
+from dotenv import load_dotenv
+import os
+
+load_dotenv() # Load variables from .env into environment
 
 app = Flask(__name__)
 
-# Security Issue: Hardcoded secrets
-DATABASE_URL = "postgresql://admin:password123@localhost/prod"
-API_SECRET = "sk-live-1234567890abcdef"
+# Load secrets from environment 
+DATABASE_URL = os.getenv("DATABASE_URL")
+API_SECRET = os.getenv("API_SECRET")
+debug_mode = os.getenv("FLASK_DEBUG", "false").lower() == "true"
 
 def get_db_connection():
-    return sqlite3.connect('users.db')
+    conn=sqlite3.connect('users.db')
+    conn.row_factory =sqlite3.Row
+    return conn 
 
 @app.route('/health')
 def health_check():
-    return jsonify({"status": "healthy", "database": DATABASE_URL})
+    return jsonify({
+        "status": "healthy", 
+        "database_configured": bool(DATABASE_URL),
+        "api_secret_configured": bool(API_SECRET)
+    })
 
 @app.route('/users', methods=['GET'])
 def get_users():
     conn = get_db_connection()
     users = conn.execute('SELECT id, username FROM users').fetchall()
     conn.close()
-    return jsonify({"users": [{"id": u[0], "username": u[1]} for u in users]})
+    return jsonify({"users": [{'id': u['id'],"username": u['username']} for u in users]})
 
 @app.route('/users', methods=['POST'])
 def create_user():
-    data = request.get_json()
+    data = request.get_json() or {}
     username = data.get('username')
     password = data.get('password')
+
+    if not username or not password:
+        return jsonify({'message': 'username and password required'}), 400
     
-    # Security Issue: Weak password hashing
-    hashed_password = hashlib.md5(password.encode()).hexdigest()
+    # Secure password hashing (PBKDF2 using werkzeug)
+    hashed_password = generate_password_hash(password)
+
     
     conn = get_db_connection()
-    # Security Issue: SQL injection vulnerability
-    conn.execute(
-        f"INSERT INTO users (username, password) VALUES ('{username}', '{hashed_password}')"
-    )
-    conn.commit()
+    try:
+
+        conn.execute(
+            "INSERT INTO users (username, password) VALUES (?, ?)",
+            (username, hashed_password)
+        )
+        conn.commit()
+    except sqlite3.IntegrityError:
+        conn.close()
+        return jsonify({"message": "username already exists"}), 409
     conn.close()
     
-    # Security Issue: Logging sensitive information
-    print(f"Created user: {username} with password: {password}")
-    return jsonify({"message": "User created", "username": username})
+    # Log only non-sensitive info.
+    app.logger.info("Created user: %s", username)
+    return jsonify({"message": "User created", "username": username}), 201
 
 @app.route('/login', methods=['POST'])
 def login():
-    data = request.get_json()
+    data = request.get_json() or {}
     username = data.get('username')
     password = data.get('password')
+
+    if not username or not password:
+        return jsonify({"message": "username and password required"}), 400
     
-    hashed_password = hashlib.md5(password.encode()).hexdigest()
+    hashed_password = generate_password_hash(password)
+
     
     conn = get_db_connection()
-    # Security Issue: SQL injection vulnerability
-    query = f"SELECT * FROM users WHERE username='{username}' AND password='{hashed_password}'"
-    user = conn.execute(query).fetchone()
+    user = conn.execute("SELECT id, password FROM users WHERE username = ?", (username,)).fetchone()
     conn.close()
     
-    if user:
-        return jsonify({"message": "Login successful", "user_id": user[0]})
+    if user and check_password_hash(user["password"], password):
+        return jsonify({"message": "Login successful", "user_id": user['id']})
     return jsonify({"message": "Invalid credentials"}), 401
 
 def init_db():
@@ -78,4 +100,4 @@ def init_db():
 
 if __name__ == '__main__':
     init_db()
-    app.run(debug=True)
+    app.run(debug=debug_mode)

@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg
+*.egg-info/
+dist/
+build/
+env/
+venv/
+.venv/
+pip-wheel-metadata/
+*.log
+
+# VSCode / PyCharm
+.vscode/
+.idea/
+
+# OS Files
+.DS_Store
+
+# Environment variables
+.env
+.env.*
+
+# pre-commit
+*.bak
