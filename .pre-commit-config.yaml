@@ -1,0 +1,12 @@
+repos:
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0  # You can check for the latest version on GitHub
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.8.6  # Use the latest version from: https://github.com/PyCQA/bandit/releases
+    hooks:
+      - id: bandit
+        args: ['-r', '.']  # recursively scan current directory
+

@@ -1,0 +1,29 @@
+name: Bandit Security Scan
+
+on:
+  push:
+    paths:
+      - '**.py'
+  pull_request:
+    paths:
+      - '**.py'
+
+jobs:
+  bandit:
+    name: Run Bandit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'  # or whatever version your project uses
+
+      - name: Install Bandit
+        run: pip install bandit
+
+      - name: Run Bandit
+        run: bandit -r . -f txt -ll
